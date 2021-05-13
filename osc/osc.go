@@ -247,13 +247,17 @@ func (msg *Message) String() string {
 		return ""
 	}
 
-	formatString := "%s %s"
+	formatString := "%s [%s]"
 	var args []interface{}
 	args = append(args, msg.Address)
 	args = append(args, tags)
 
 	for _, arg := range msg.Arguments {
 		switch arg.(type) {
+		case uint32:
+			formatString += " %x"
+			args = append(args, arg)
+
 		case bool, int32, int64, float32, float64, string:
 			formatString += " %v"
 			args = append(args, arg)
@@ -317,6 +321,12 @@ func (msg *Message) MarshalBinary() ([]byte, error) {
 		case int32:
 			typetags = append(typetags, 'i')
 			if err := binary.Write(payload, binary.BigEndian, int32(t)); err != nil {
+				return nil, err
+			}
+
+		case uint32:
+			typetags = append(typetags, 'm')
+			if err := binary.Write(payload, binary.BigEndian, uint32(t)); err != nil {
 				return nil, err
 			}
 
@@ -746,6 +756,15 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 			*start += 4
 			msg.Append(i)
 
+		case 'm':
+			var i uint32
+			if err = binary.Read(reader, binary.BigEndian, &i); err != nil {
+				return err
+			}
+
+			*start += 8
+			msg.Append(i)
+
 		case 'h': // int64
 			var i int64
 			if err = binary.Read(reader, binary.BigEndian, &i); err != nil {
@@ -1081,6 +1100,8 @@ func getTypeTag(arg interface{}) (string, error) {
 		return "F", nil
 	case nil:
 		return "N", nil
+	case uint32:
+		return "m", nil
 	case int32:
 		return "i", nil
 	case float32:
